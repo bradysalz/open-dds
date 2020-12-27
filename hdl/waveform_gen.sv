@@ -1,5 +1,4 @@
 `default_nettype none `timescale 1ns / 1ps
-
 /**
 * Module waveform_gen
 *
@@ -9,7 +8,7 @@
 
 module waveform_gen (
     input wire [27:0] phase,
-    input wire [13:0] phase_offset,
+    input wire [27:0] phase_offset,
     input wire [ 1:0] wave_style,
 
     output reg [13:0] outval
@@ -24,12 +23,15 @@ module waveform_gen (
   end
 `endif
 
+  // icarus verilog doesn't support indexing in always_* processes
+  // so we pull them out here
   wire [27:0] phase_with_offset = phase + phase_offset;
-  wire [13:0] phase_msb = phase_with_offset[27:13];
+  wire [13:0] phase_upper_half = phase_with_offset[27:14];
+  wire phase_msb = phase_with_offset[27];
   wire [13:0] sine_value;
 
   sin_rom sine_table (
-      .addr(phase_msb),
+      .addr(phase_upper_half),
       .sine(sine_value)
   );
 
@@ -42,28 +44,29 @@ module waveform_gen (
 
       // square wave
       2'b01: begin
-        if (phase_msb[13]) begin
-          outval = 14'h3FF;
+        if (phase_msb) begin
+          outval = 14'h3FFF;
         end else begin
           outval = 0;
         end
       end
 
       // triangle wave
+      // only uses the lower 13b of the 14b word, so we scale by two
       2'b10: begin
-        if (phase_msb[13]) begin
-          outval = 14'h3FF - phase_msb;
+        if (phase_msb) begin
+          outval = ~(phase_upper_half << 1);
         end else begin
-          outval = phase_msb << 1;
+          outval = phase_upper_half << 1;
         end
       end
 
       // sawtooth wave
       2'b11: begin
-        outval = phase_msb;
+        outval = phase_upper_half;
       end
 
-      default: outval = phase_msb;
+      default: outval = phase_upper_half;
     endcase
   end
 
